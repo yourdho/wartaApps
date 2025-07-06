@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:wartaapps/utils/Storage.dart';
 import 'routes/app_routes.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Storage.init();
+
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
   runApp(const WartaApp());
 }
 
@@ -17,9 +27,13 @@ class WartaApp extends StatelessWidget {
         useMaterial3: true,
         primarySwatch: Colors.blue,
         scaffoldBackgroundColor: Colors.white,
+        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+          selectedItemColor: Color(0xFF2B4D8C),
+          unselectedItemColor: Colors.grey,
+        ),
       ),
-      initialRoute: AppRoutes.splash, // ← splash_screen.dart
-      routes: routes, // ← ini sekarang refer ke variable `routes` global
+      initialRoute: AppRoutes.splash,
+      routes: routes,
     );
   }
 }

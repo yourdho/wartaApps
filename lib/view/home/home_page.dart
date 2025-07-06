@@ -1,7 +1,104 @@
 import 'package:flutter/material.dart';
+import 'package:wartaapps/models/news_model.dart';
+import 'package:wartaapps/routes/app_routes.dart';
+import 'package:wartaapps/services/news_service.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final NewsService _newsService = NewsService();
+  final List<String> categories = [
+    'All',
+    'Bisnis',
+    'Teknologi',
+    'Olahraga',
+    'Hiburan',
+    'Politik',
+  ];
+
+  late Future<NewsResponse> _newsFuture;
+  int _selectedCategoryIndex = 0;
+  int _currentPage = 1;
+  final int _itemsPerPage = 10;
+  bool _isLoadingMore = false;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _newsFuture = _fetchNews();
+    _scrollController.addListener(_scrollListener);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<NewsResponse> _fetchNews() async {
+    return await _newsService.getPublishedNews(
+      page: _currentPage,
+      limit: _itemsPerPage,
+      category:
+          _selectedCategoryIndex > 0
+              ? categories[_selectedCategoryIndex]
+              : null,
+    );
+  }
+
+  void _scrollListener() {
+    if (_scrollController.position.pixels ==
+        _scrollController.position.maxScrollExtent) {
+      _loadMoreNews();
+    }
+  }
+
+  Future<void> _loadMoreNews() async {
+    if (_isLoadingMore) return;
+
+    setState(() => _isLoadingMore = true);
+    _currentPage++;
+
+    try {
+      final newNews = await _fetchNews();
+      setState(() {
+        _newsFuture = _newsFuture.then((existingNews) {
+          return NewsResponse(
+            success: existingNews.success,
+            message: existingNews.message,
+            data: [...existingNews.data, ...newNews.data],
+            pagination: newNews.pagination,
+          );
+        });
+      });
+    } catch (e) {
+      debugPrint('Error loading more news: $e');
+      _currentPage--;
+    } finally {
+      setState(() => _isLoadingMore = false);
+    }
+  }
+
+  void _refreshNews() {
+    setState(() {
+      _currentPage = 1;
+      _newsFuture = _fetchNews();
+    });
+  }
+
+  void _onCategorySelected(int index) {
+    setState(() {
+      _selectedCategoryIndex = index;
+      _currentPage = 1;
+      _newsFuture = _fetchNews();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -10,123 +107,124 @@ class HomePage extends StatelessWidget {
         automaticallyImplyLeading: false,
         title: Image.asset('assets/images/logos_warta.png', height: 36),
         centerTitle: true,
-        backgroundColor: const Color.fromARGB(255, 255, 255, 255),
+        backgroundColor: Colors.white,
         elevation: 0,
         toolbarHeight: 60,
-        iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Row(
-            children: [
-              // Image.asset('assets/images/logo_warta.png', width: 70),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Cari berita...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30),
+      body: RefreshIndicator(
+        onRefresh: () async => _refreshNews(),
+        child: FutureBuilder<NewsResponse>(
+          future: _newsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !_isLoadingMore) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Gagal memuat berita'),
+                    const SizedBox(height: 10),
+                    ElevatedButton(
+                      onPressed: _refreshNews,
+                      child: const Text('Coba Lagi'),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                  ],
+                ),
+              );
+            }
+            if (!snapshot.hasData || snapshot.data!.data.isEmpty) {
+              return const Center(child: Text('Tidak ada berita tersedia'));
+            }
+            final newsResponse = snapshot.data!;
+            final newsList = newsResponse.data;
+            return ListView(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16),
+              children: [
+                Row(
+                  children: [
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText: 'Cari berita...',
+                          prefixIcon: const Icon(Icons.search),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                          ),
+                        ),
+                        onSubmitted: (value) {
+                          setState(() {
+                            _newsFuture = _newsService.getPublishedNews(
+                              search: value,
+                              category:
+                                  _selectedCategoryIndex > 0
+                                      ? categories[_selectedCategoryIndex]
+                                      : null,
+                            );
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: categories.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      final isSelected = index == _selectedCategoryIndex;
+                      return ChoiceChip(
+                        label: Text(categories[index]),
+                        selected: isSelected,
+                        selectedColor: const Color(0xFF2B4D8C),
+                        backgroundColor: Colors.grey.shade200,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black,
+                        ),
+                        onSelected: (_) => _onCategorySelected(index),
+                      );
+                    },
                   ),
                 ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 24),
-
-          SizedBox(
-            height: 40,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: categories.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final cat = categories[index];
-                final isSelected = index == 0;
-                return ChoiceChip(
-                  label: Text(cat),
-                  selected: isSelected,
-                  selectedColor: const Color(0xFF2B4D8C),
-                  backgroundColor: Colors.grey.shade200,
-                  labelStyle: TextStyle(
-                    color: isSelected ? Colors.white : Colors.black,
+                const SizedBox(height: 24),
+                ...newsList.map((news) => NewsCard(news: news)).toList(),
+                if (_isLoadingMore)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: CircularProgressIndicator()),
                   ),
-                  onSelected: (_) {},
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // 📰 Berita list
-          ...articles.map((a) => NewsCard(article: a)).toList(),
-        ],
+                if (newsResponse.pagination?.hasNext == false)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: Text(
+                        'Anda telah mencapai akhir daftar',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 }
 
-// Contoh: Kategori
-final categories = [
-  'Trending',
-  'Bisnis',
-  'Teknologi',
-  'Olahraga',
-  'Hiburan',
-  'Politik',
-  'Kecantikan',
-];
-
-// Model Berita
-class Article {
-  final String title, source, imageUrl, time;
-  Article(this.title, this.source, this.imageUrl, this.time);
-}
-
-// Contoh data
-final articles = [
-  Article(
-    'Barca Hajar Madrid 4-0 Bukan Kemenangan Terbesar Blaugrana di El Clasico',
-    'CNN Indonesia',
-    'assets/images/barca.jpg',
-    '2 jam lalu',
-  ),
-  Article(
-    'Iran Tolak Mentah-Mentah Syarat AS soal Nuklir, OTW Perang Dunia 3?',
-    'Kompas',
-    'assets/images/wwc3.jpeg',
-    '5 jam lalu',
-  ),
-  Article(
-    'Barca Hajar Madrid 4-0 Bukan Kemenangan Terbesar Blaugrana di El Clasico',
-    'CNN Indonesia',
-    'assets/images/barca.jpg',
-    '2 jam lalu',
-  ),
-  Article(
-    'Barca Hajar Madrid 4-0 Bukan Kemenangan Terbesar Blaugrana di El Clasico',
-    'CNN Indonesia',
-    'assets/images/barca.jpg',
-    '2 jam lalu',
-  ),
-  Article(
-    'Barca Hajar Madrid 4-0 Bukan Kemenangan Terbesar Blaugrana di El Clasico',
-    'CNN Indonesia',
-    'assets/images/barca.jpg',
-    '2 jam lalu',
-  ),
-  // Tambahkan berita lainnya
-];
-
-// 🧾 Card Berita
 class NewsCard extends StatelessWidget {
-  final Article article;
-  const NewsCard({required this.article, super.key});
+  final News news;
+  const NewsCard({required this.news, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -136,43 +234,118 @@ class NewsCard extends StatelessWidget {
       elevation: 4,
       child: InkWell(
         onTap: () {
-          Navigator.pushNamed(context, '/detail', arguments: article);
+          Navigator.pushNamed(context, AppRoutes.detail, arguments: news);
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
+            if (news.featuredImageUrl != null)
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
+                child: Image.network(
+                  news.featuredImageUrl!,
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder:
+                      (_, __, ___) => Container(
+                        height: 180,
+                        color: Colors.grey[200],
+                        child: const Icon(Icons.broken_image),
+                      ),
+                ),
               ),
-              child: Image.network(
-                article.imageUrl,
-                height: 180,
-                width: double.infinity,
-                fit: BoxFit.cover,
-              ),
-            ),
             Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    article.source,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  Row(
+                    children: [
+                      if (news.category != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[50],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            news.category!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue[800],
+                            ),
+                          ),
+                        ),
+                      const Spacer(),
+                      if (news.publishedAt != null)
+                        Text(
+                          _formatDate(news.publishedAt!),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                    ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Text(
-                    article.title,
+                    news.title,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    article.time,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  const SizedBox(height: 8),
+                  if (news.summary != null)
+                    Text(
+                      news.summary!,
+                      style: const TextStyle(fontSize: 14),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (news.authorAvatar != null)
+                        CircleAvatar(
+                          radius: 12,
+                          backgroundImage: NetworkImage(news.authorAvatar!),
+                        ),
+                      if (news.authorName != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Text(
+                            news.authorName!,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      const Spacer(),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.remove_red_eye,
+                            size: 16,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${news.viewCount}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -181,5 +354,20 @@ class NewsCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays > 30) {
+      return '${difference.inDays ~/ 30} bulan lalu';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays} hari lalu';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} jam lalu';
+    } else {
+      return '${difference.inMinutes} menit lalu';
+    }
   }
 }

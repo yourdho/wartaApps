@@ -41,9 +41,11 @@ class _RegisterPageState extends State<RegisterPage> {
             children: [
               const SizedBox(height: 30),
               Center(
-                child: Image.asset('assets/images/logos_warta.png', height: 120),
+                child: Image.asset(
+                  'assets/images/logos_warta.png',
+                  height: 120,
+                ),
               ),
-
               const SizedBox(height: 30),
               TextFormField(
                 decoration: inputDecoration.copyWith(hintText: 'Username'),
@@ -72,7 +74,6 @@ class _RegisterPageState extends State<RegisterPage> {
               TextFormField(
                 decoration: inputDecoration.copyWith(hintText: 'Nomor Ponsel'),
               ),
-
               const SizedBox(height: 20),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,7 +107,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: () {
@@ -124,7 +124,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   style: TextStyle(color: Colors.white, fontSize: 16),
                 ),
               ),
-
               const SizedBox(height: 80),
               const Row(
                 children: [
@@ -136,7 +135,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   Expanded(child: Divider()),
                 ],
               ),
-
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -160,7 +158,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
